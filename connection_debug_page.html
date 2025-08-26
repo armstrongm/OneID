@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connection Debug & Fix</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto space-y-8">
+        <div class="bg-white rounded-lg shadow p-6">
+            <h1 class="text-2xl font-bold mb-6 text-gray-900">🔧 Connection Debug & Fix Tool</h1>
+            
+            <!-- PingOne Configuration Test -->
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-4 text-blue-800">🔍 1. PingOne Configuration Test</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Client ID</label>
+                        <input type="text" id="clientId" class="w-full px-3 py-2 border rounded-md" placeholder="Your PingOne Client ID">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Client Secret</label>
+                        <input type="password" id="clientSecret" class="w-full px-3 py-2 border rounded-md" placeholder="Your PingOne Client Secret">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Environment ID</label>
+                        <input type="text" id="environmentId" class="w-full px-3 py-2 border rounded-md" placeholder="Your Environment ID">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Region</label>
+                        <select id="region" class="w-full px-3 py-2 border rounded-md">
+                            <option value="NA">North America</option>
+                            <option value="EU">Europe</option>
+                            <option value="APAC">Asia Pacific</option>
+                        </select>
+                    </div>
+                </div>
+                <button onclick="testPingOne()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    🧪 Test PingOne Connection
+                </button>
+                <div id="pingone-result" class="mt-4 p-4 rounded-md hidden"></div>
+            </div>
+
+            <!-- Connection Update Test -->
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-4 text-green-800">📝 2. Connection Update Test</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Connection ID</label>
+                        <input type="text" id="connectionId" value="conn-1" class="w-full px-3 py-2 border rounded-md">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">New Connection Name</label>
+                        <input type="text" id="connectionName" value="Updated Test Connection" class="w-full px-3 py-2 border rounded-md">
+                    </div>
+                </div>
+                <button onclick="testConnectionUpdate()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                    📝 Test Connection Update
+                </button>
+                <div id="update-result" class="mt-4 p-4 rounded-md hidden"></div>
+            </div>
+
+            <!-- API Endpoints Test -->
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-4 text-purple-800">🌐 3. API Endpoints Test</h2>
+                <div class="space-y-2">
+                    <button onclick="testEndpoint('GET', '/api/connections')" class="mr-2 px-3 py-1 bg-purple-600 text-white rounded text-sm">
+                        GET /api/connections
+                    </button>
+                    <button onclick="testEndpoint('GET', '/api/connections/conn-1')" class="mr-2 px-3 py-1 bg-purple-600 text-white rounded text-sm">
+                        GET /api/connections/conn-1
+                    </button>
+                    <button onclick="testEndpoint('PUT', '/api/connections/conn-1', {name: 'Test Update'})" class="mr-2 px-3 py-1 bg-purple-600 text-white rounded text-sm">
+                        PUT /api/connections/conn-1
+                    </button>
+                </div>
+                <div id="endpoint-result" class="mt-4 p-4 rounded-md hidden"></div>
+            </div>
+
+            <!-- Results Summary -->
+            <div id="results-summary" class="bg-gray-50 p-4 rounded-md">
+                <h3 class="font-semibold mb-2">📊 Test Results Summary</h3>
+                <ul id="summary-list" class="text-sm text-gray-600 space-y-1">
+                    <li>• Click the test buttons above to run diagnostics</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const results = {
+            pingone: null,
+            update: null,
+            endpoints: {}
+        };
+
+        async function testPingOne() {
+            const clientId = document.getElementById('clientId').value;
+            const clientSecret = document.getElementById('clientSecret').value;
+            const environmentId = document.getElementById('environmentId').value;
+            const region = document.getElementById('region').value;
+
+            if (!clientId || !clientSecret || !environmentId) {
+                showResult('pingone-result', 'error', 'Please fill in all required fields');
+                return;
+            }
+
+            showResult('pingone-result', 'loading', 'Testing PingOne connection...');
+
+            try {
+                const response = await fetch('/api/settings/pingone/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ clientId, clientSecret, environmentId, region })
+                });
+
+                const result = await response.json();
+                results.pingone = { status: response.status, result };
+
+                if (response.ok) {
+                    showResult('pingone-result', 'success', `✅ PingOne connection successful!\n\nDetails:\n${JSON.stringify(result, null, 2)}`);
+                } else {
+                    let errorMsg = `❌ PingOne connection failed (${response.status})\n\n`;
+                    
+                    if (result.error && result.error.includes('Authorization header requires')) {
+                        errorMsg += `🚨 AWS ENDPOINT DETECTED!\n\nYour token URL is pointing to AWS, not PingOne.\n\nExpected PingOne URL format:\n- NA: https://api.pingone.com/v1/environments/{env-id}/as/token\n- EU: https://api.pingone.eu/v1/environments/{env-id}/as/token\n- APAC: https://api.pingone.asia/v1/environments/{env-id}/as/token\n\n`;
+                    }
+                    
+                    errorMsg += `Error: ${result.error}\n\nSuggestions: ${result.suggestions ? result.suggestions.join(', ') : 'Check your configuration'}`;
+                    showResult('pingone-result', 'error', errorMsg);
+                }
+            } catch (error) {
+                results.pingone = { error: error.message };
+                showResult('pingone-result', 'error', `❌ Network error: ${error.message}`);
+            }
+
+            updateSummary();
+        }
+
+        async function testConnectionUpdate() {
+            const connectionId = document.getElementById('connectionId').value;
+            const connectionName = document.getElementById('connectionName').value;
+
+            showResult('update-result', 'loading', 'Testing connection update...');
+
+            try {
+                const response = await fetch(`/api/connections/${connectionId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: connectionName, status: 'connected' })
+                });
+
+                const result = await response.json();
+                results.update = { status: response.status, result };
+
+                if (response.ok) {
+                    showResult('update-result', 'success', `✅ Connection updated successfully!\n\nResponse:\n${JSON.stringify(result, null, 2)}`);
+                } else {
+                    showResult('update-result', 'error', `❌ Update failed (${response.status})\n\nError: ${result.error}\n\nResponse:\n${JSON.stringify(result, null, 2)}`);
+                }
+            } catch (error) {
+                results.update = { error: error.message };
+                showResult('update-result', 'error', `❌ Network error: ${error.message}`);
+            }
+
+            updateSummary();
+        }
+
+        async function testEndpoint(method, url, body = null) {
+            showResult('endpoint-result', 'loading', `Testing ${method} ${url}...`);
+
+            try {
+                const options = {
+                    method,
+                    headers: { 'Content-Type': 'application/json' }
+                };
+                
+                if (body && method !== 'GET') {
+                    options.body = JSON.stringify(body);
+                }
+
+                const response = await fetch(url, options);
+                const result = await response.json();
+                
+                results.endpoints[`${method} ${url}`] = { status: response.status, result };
+
+                const status = response.ok ? 'success' : 'error';
+                const message = `${method} ${url} → ${response.status}\n\nResponse:\n${JSON.stringify(result, null, 2)}`;
+                
+                showResult('endpoint-result', status, message);
+            } catch (error) {
+                results.endpoints[`${method} ${url}`] = { error: error.message };
+                showResult('endpoint-result', 'error', `❌ ${method} ${url} failed: ${error.message}`);
+            }
+
+            updateSummary();
+        }
+
+        function showResult(elementId, type, message) {
+            const element = document.getElementById(elementId);
+            element.classList.remove('hidden');
+            
+            element.className = `mt-4 p-4 rounded-md ${
+                type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
+                type === 'error' ? 'bg-red-50 border border-red-200 text-red-800' :
+                'bg-blue-50 border border-blue-200 text-blue-800'
+            }`;
+            
+            element.innerHTML = `<pre class="whitespace-pre-wrap text-sm">${message}</pre>`;
+        }
+
+        function updateSummary() {
+            const summaryList = document.getElementById('summary-list');
+            const items = [];
+
+            if (results.pingone) {
+                const status = results.pingone.error ? '❌' : (results.pingone.result.success ? '✅' : '❌');
+                items.push(`${status} PingOne Test: ${results.pingone.error || results.pingone.result.message}`);
+            }
+
+            if (results.update) {
+                const status = results.update.error ? '❌' : (results.update.status === 200 ? '✅' : '❌');
+                items.push(`${status} Connection Update: ${results.update.error || 'Completed'}`);
+            }
+
+            Object.entries(results.endpoints).forEach(([endpoint, result]) => {
+                const status = result.error ? '❌' : (result.status < 400 ? '✅' : '❌');
+                items.push(`${status} ${endpoint}: ${result.error || result.status}`);
+            });
+
+            if (items.length === 0) {
+                items.push('• Click the test buttons above to run diagnostics');
+            }
+
+            summaryList.innerHTML = items.map(item => `<li>${item}</li>`).join('');
+        }
+
+        // Auto-populate with sample data for testing
+        document.getElementById('clientId').value = 'your-client-id-here';
+        document.getElementById('environmentId').value = 'your-environment-id-here';
+    </script>
+</body>
+</html>
