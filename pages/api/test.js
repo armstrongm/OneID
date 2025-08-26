@@ -1,23 +1,12 @@
-// pages/api/test.js - Simple test endpoint
+// pages/api/test.js - Basic test endpoint
 export default function handler(req, res) {
-  console.log('Test endpoint called:', req.method);
+  console.log(`🔄 ${req.method} /api/test`);
+  
   res.status(200).json({ 
-    message: 'Backend is working!',
+    success: true,
+    message: 'API is working!',
     method: req.method,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    server: 'Next.js API Routes'
   });
 }
-
-fetch('/api/auth/token', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    code: 'test-code',
-    redirectUri: 'http://localhost:3001/auth/callback'
-  })
-})
-.then(response => response.json())
-.then(data => console.log('Response:', data))
-.catch(error => console.error('Error:', error));

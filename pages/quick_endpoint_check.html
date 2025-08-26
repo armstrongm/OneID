@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quick API Check</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-8">
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-2xl font-bold mb-4">🔍 Quick API Endpoint Check</h1>
+        <div id="results" class="space-y-2"></div>
+        <button onclick="checkEndpoints()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded">
+            Check All Endpoints
+        </button>
+    </div>
+
+    <script>
+        async function checkEndpoints() {
+            const endpoints = [
+                { method: 'GET', url: '/api/connections', name: 'Connections List' },
+                { method: 'GET', url: '/api/connections/conn-1', name: 'Single Connection' },
+                { method: 'POST', url: '/api/settings/pingone/test', name: 'PingOne Test', body: { clientId: 'test' } },
+                { method: 'GET', url: '/api/test', name: 'Basic Test Endpoint' }
+            ];
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p class="text-blue-600">Checking endpoints...</p>';
+
+            const results = [];
+
+            for (const endpoint of endpoints) {
+                try {
+                    const options = {
+                        method: endpoint.method,
+                        headers: { 'Content-Type': 'application/json' }
+                    };
+                    
+                    if (endpoint.body) {
+                        options.body = JSON.stringify(endpoint.body);
+                    }
+
+                    const response = await fetch(endpoint.url, options);
+                    const status = response.status;
+                    
+                    results.push({
+                        name: endpoint.name,
+                        url: `${endpoint.method} ${endpoint.url}`,
+                        status: status,
+                        ok: response.ok || status === 400, // 400 is ok for validation errors
+                        error: null
+                    });
+                } catch (error) {
+                    results.push({
+                        name: endpoint.name,
+                        url: `${endpoint.method} ${endpoint.url}`,
+                        status: 'FAILED',
+                        ok: false,
+                        error: error.message
+                    });
+                }
+            }
+
+            // Display results
+            resultsDiv.innerHTML = results.map(result => `
+                <div class="p-3 rounded-md border ${result.ok ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}">
+                    <div class="font-medium ${result.ok ? 'text-green-800' : 'text-red-800'}">
+                        ${result.ok ? '✅' : '❌'} ${result.name}
+                    </div>
+                    <div class="text-sm text-gray-600">${result.url} → ${result.status}</div>
+                    ${result.error ? `<div class="text-sm text-red-600 mt-1">Error: ${result.error}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Auto-run check
+        window.onload = () => setTimeout(checkEndpoints, 1000);
+    </script>
+</body>
+</html>

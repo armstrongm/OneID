@@ -1,8 +1,4 @@
-// Add this to the top of your /api/settings/pingone/test.js file
-console.log('=== USING WORKING POSTMAN-EXACT CODE ===');
-console.log('File timestamp:', new Date().toISOString());
-
-// pages/api/settings/pingone/postman-exact.js - Match Postman exactly
+a// pages/api/settings/pingone/postman-exact.js - Match Postman exactly
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
