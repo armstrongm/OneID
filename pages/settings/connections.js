@@ -1,8 +1,8 @@
-// pages/settings/connections.js - Fixed version with correct imports
+// pages/settings/connections.js - COMPLETE FIXED VERSION
 import { useState, useEffect } from 'react';
 import { Plus, RefreshCw, Settings, Trash2, TestTube } from 'lucide-react';
 
-// Import your components with correct syntax
+// Import your components
 import ConnectionForm from '../../components/connections/ConnectionForm';
 import PingOneConnectionCard from '../../components/connections/PingOneConnectionCard';
 import { CONNECTION_TYPES } from '../../lib/constants/connectionTypes';
@@ -14,7 +14,7 @@ export default function ConnectionsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState(null);
-  const [selectedConnectionType, setSelectedConnectionType] = useState('PINGONE'); // Start with PingOne
+  const [selectedConnectionType, setSelectedConnectionType] = useState('PINGONE');
   const [actionLoading, setActionLoading] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
@@ -66,103 +66,179 @@ export default function ConnectionsPage() {
     fetchConnections();
   };
 
-  // FIXED TEST HANDLER
   const handleTest = async (connectionId) => {
-    console.log('=== FRONTEND TEST START ===');
-    console.log('Connection ID:', connectionId);
+  console.log('=== FRONTEND TEST START ===');
+  console.log('Connection ID:', connectionId);
+ // ADD THESE DEBUG LINES
+  console.log('🐛 ALL CONNECTIONS:', connections);
+  console.log('🐛 CONNECTIONS LENGTH:', connections.length);
+  try {
+    const connection = connections.find(c => c.id === connectionId);
 
-    try {
-      // Find the connection data
-      const connection = connections.find(c => c.id === connectionId);
-      if (!connection) {
-        console.error('Connection not found:', connectionId);
+    // ADD MORE DEBUG
+    console.log('🐛 FOUND CONNECTION:', connection);
+    console.log('🔑 Client Secret:', connection?.clientSecret);
+    console.log('🆔 Client ID:', connection?.clientId);
+    console.log('🌍 Environment ID:', connection?.environmentId);
+    if (!connection) {
+      console.error('Connection not found:', connectionId);
+      return;
+    }
+
+    console.log('Connection found:', connection.name);
+    console.log('Connection type:', connection.type);
+    console.log('Full connection data:', connection);
+
+    setActionLoading(true);
+    setTestResult(null);
+
+    // FIXED: Prepare test data based on connection type with proper field mapping
+    let testData;
+    
+    if (connection.type === 'PINGONE') {
+      console.log('Preparing PingOne test data...');
+      
+      // CRITICAL FIX: Handle both connection formats
+      // Check for data in connection_config first, then direct properties
+      const config = connection.connection_config || {};
+      
+      testData = {
+        type: 'PINGONE',
+        // Try connection_config first, then direct properties
+        clientId: config.clientId || connection.clientId,
+        clientSecret: config.clientSecret || connection.clientSecret,
+        environmentId: config.environmentId || connection.environmentId,
+        region: config.region || connection.region,
+        scopes: config.scopes || connection.scopes
+      };
+
+      console.log('Test data prepared:', {
+        type: testData.type,
+        clientId: testData.clientId ? `${testData.clientId.substring(0, 8)}...` : 'MISSING',
+        clientSecret: testData.clientSecret ? 'PROVIDED' : 'MISSING',
+        environmentId: testData.environmentId ? `${testData.environmentId.substring(0, 8)}...` : 'MISSING',
+        region: testData.region || 'MISSING'
+      });
+
+      // Validate required fields
+      if (!testData.clientId || !testData.clientSecret || !testData.environmentId) {
+        console.error('❌ Missing required PingOne credentials:', {
+          clientId: !!testData.clientId,
+          clientSecret: !!testData.clientSecret,
+          environmentId: !!testData.environmentId
+        });
+        
+        setTestResult({
+          success: false,
+          message: 'Missing required PingOne credentials',
+          error: 'invalid_client',
+          details: {
+            clientId: testData.clientId ? 'PROVIDED' : 'MISSING',
+            clientSecret: testData.clientSecret ? 'PROVIDED' : 'MISSING', 
+            environmentId: testData.environmentId ? 'PROVIDED' : 'MISSING'
+          }
+        });
         return;
       }
 
-      console.log('Connection found:', connection.name);
-      console.log('Connection type:', connection.type);
+    } else {
+      // Traditional connection types
+      testData = {
+        name: connection.name,
+        type: connection.type,
+        serverName: connection.serverName || connection.server,
+        domain: connection.domain,
+        baseDN: connection.baseDN,
+        username: connection.username,
+        password: connection.password
+      };
+    }
 
-      // Set loading state
-      setActionLoading(true);
-      setTestResult(null);
+    console.log('Sending test request...');
 
-      // For PingOne connections, test the configuration
-      if (connection.type === 'PINGONE') {
-        console.log('Testing PingOne connection...');
-        
-        // Get config from connection
-        const config = connection.connection_config || {};
-        console.log('Config keys:', Object.keys(config));
+    const response = await fetch('/api/connections/test-config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(testData),
+    });
 
-        const testData = {
-          type: 'PINGONE',
-          environmentId: config.environmentId,
-          region: config.region,
-          clientId: config.clientId,
-          clientSecret: config.clientSecret,
-          scopes: config.scopes
-        };
+    console.log('Test response status:', response.status);
+    
+    const result = await response.json();
+    console.log('Test result:', result);
 
-        console.log('Sending test data:', {
-          type: testData.type,
-          environmentId: testData.environmentId ? `${testData.environmentId.substring(0, 8)}...` : 'MISSING',
-          region: testData.region,
-          clientId: testData.clientId ? `${testData.clientId.substring(0, 8)}...` : 'MISSING',
-          clientSecret: testData.clientSecret ? 'PROVIDED' : 'MISSING'
-        });
+    setTestResult(result);
 
-        const response = await fetch('/api/connections/test-config', {
-          method: 'POST',
+    // Update connection status if test is successful
+    if (response.ok && result.success) {
+      console.log('✅ Test successful - updating connection status...');
+      
+      try {
+        const updateResponse = await fetch(`/api/connections/${connectionId}`, {
+          method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(testData),
+          body: JSON.stringify({
+            status: 'connected',
+            lastTested: new Date().toISOString()
+          }),
         });
 
-        console.log('Response status:', response.status);
-        console.log('Response ok:', response.ok);
-
-        const result = await response.json();
-        console.log('Test result:', result);
-
-        setTestResult(result);
-
-        if (response.ok && result.success) {
-          console.log('✅ Test successful');
-          // Update connection status
+        if (updateResponse.ok) {
+          console.log('✅ Connection status updated to connected');
           setTimeout(fetchConnections, 1000);
         } else {
-          console.error('❌ Test failed:', result.message || result.error);
+          console.error('❌ Failed to update connection status');
         }
-      } else {
-        // For other connection types
-        setTestResult({
-          success: false,
-          message: `Testing not yet implemented for ${connection.type} connections`,
-          tests: []
-        });
+      } catch (updateError) {
+        console.error('❌ Error updating connection status:', updateError);
       }
-
-    } catch (error) {
-      console.error('=== FRONTEND TEST ERROR ===');
-      console.error('Error:', error.message);
-
-      setTestResult({
-        success: false,
-        message: 'Test request failed',
-        error: error.message,
-        tests: [{
-          name: 'Request Error',
-          success: false,
-          message: error.message,
-          details: { errorType: error.constructor.name }
-        }]
-      });
-    } finally {
-      console.log('=== FRONTEND TEST END ===');
-      setActionLoading(false);
+    } else {
+      console.error('❌ Test failed:', result.message || result.error);
     }
-  };
+
+  } catch (error) {
+    console.error('=== FRONTEND TEST ERROR ===', error);
+    setTestResult({
+      success: false,
+      message: 'Test request failed',
+      error: error.message
+    });
+  } finally {
+    setActionLoading(false);
+    console.log('=== FRONTEND TEST END ===');
+  }
+};
+
+// ALSO - Debug your connection data by adding this test function:
+
+const debugConnectionData = (connectionId) => {
+  const connection = connections.find(c => c.id === connectionId);
+  console.log('=== CONNECTION DEBUG ===');
+  console.log('Connection ID:', connectionId);
+  console.log('Full connection object:', connection);
+  console.log('Connection keys:', Object.keys(connection || {}));
+  console.log('Has connection_config?', !!connection?.connection_config);
+  console.log('Connection_config keys:', Object.keys(connection?.connection_config || {}));
+  console.log('Direct clientId:', connection?.clientId);
+  console.log('Config clientId:', connection?.connection_config?.clientId);
+  console.log('Direct clientSecret:', connection?.clientSecret ? 'PROVIDED' : 'MISSING');
+  console.log('Config clientSecret:', connection?.connection_config?.clientSecret ? 'PROVIDED' : 'MISSING');
+  console.log('=== END DEBUG ===');
+};
+
+// Add a debug button to your connection card temporarily:
+// <button onClick={() => debugConnectionData(connection.id)}>Debug</button>
+
+
+
+
+// The issue is that getAllConnections() was removing the actual clientSecret 
+// and replacing it with '[SAVED]', so when the test runs, it gets '[SAVED]' 
+// instead of the real client secret.
 
   const handleDelete = async (connectionId) => {
     if (!confirm('Are you sure you want to delete this connection?')) {
@@ -186,6 +262,19 @@ export default function ConnectionsPage() {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleEdit = (connection) => {
+    console.log('Editing connection:', connection);
+    setSelectedConnection(connection);
+    setSelectedConnectionType(connection.type);
+    setShowEditModal(true);
+    setTestResult(null);
+  };
+
+  const handleImport = (result) => {
+    console.log('Import completed:', result);
+    fetchConnections();
   };
 
   const handleCreateConnection = async (connectionData) => {
@@ -270,43 +359,109 @@ export default function ConnectionsPage() {
     }
   };
 
-  const handleEdit = (connection) => {
-    setSelectedConnection(connection);
-    setSelectedConnectionType(connection.type);
-    setShowEditModal(true);
-    setTestResult(null);
-  };
-
-  const handleImport = (result) => {
-    console.log('Import completed:', result);
-    fetchConnections();
-  };
-
+  // FIXED: Safe renderConnectionCard function with all handlers in scope
   const renderConnectionCard = (connection) => {
-    if (connection.type === 'PINGONE') {
+    // Safety check - ensure connection exists and has required properties
+    if (!connection || !connection.id || !connection.type) {
+      console.error('Invalid connection data:', connection);
       return (
-        <PingOneConnectionCard
-          key={connection.id}
-          connection={connection}
-          onTest={handleTest}
-          onDelete={handleDelete}
-          onEdit={handleEdit}
-          onImport={handleImport}
-        />
+        <div key={connection?.id || Math.random()} className="p-4 border border-red-200 rounded-lg bg-red-50">
+          <div className="text-red-800 font-medium">Invalid Connection Data</div>
+          <div className="text-red-600 text-sm">Connection data is missing or corrupted</div>
+        </div>
       );
-    } else {
-      // Standard connection card for non-PingOne connections
+    }
+
+    try {
+      if (connection.type === 'PINGONE') {
+        return (
+          <PingOneConnectionCard
+            key={connection.id}
+            connection={connection}
+            onTest={handleTest}
+            onDelete={handleDelete}
+            onEdit={handleEdit}
+            onImport={handleImport}
+          />
+        );
+      } else {
+        // Standard connection card for non-PingOne connections
+        return (
+          <div key={connection.id} className="bg-white rounded-lg shadow border border-gray-200 p-6">
+            {/* Connection Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Settings className="w-5 h-5 text-blue-600" />
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">{connection.name}</h3>
+                  <p className="text-sm text-gray-500">{connection.type}</p>
+                </div>
+              </div>
+              
+              {/* Status Badge */}
+              <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                connection.status === 'connected' 
+                  ? 'bg-green-100 text-green-800'
+                  : connection.status === 'error'
+                  ? 'bg-red-100 text-red-800'
+                  : 'bg-gray-100 text-gray-800'
+              }`}>
+                {connection.status || 'created'}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex space-x-2">
+              <button
+                onClick={() => handleTest(connection.id)}
+                disabled={actionLoading}
+                className="flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 disabled:opacity-50"
+              >
+                <TestTube className="w-4 h-4 mr-1" />
+                Test
+              </button>
+              
+              <button
+                onClick={() => handleEdit(connection)}
+                className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100"
+              >
+                Edit
+              </button>
+              
+              <button
+                onClick={() => handleDelete(connection.id)}
+                disabled={actionLoading}
+                className="flex items-center px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Delete
+              </button>
+            </div>
+          </div>
+        );
+      }
+    } catch (error) {
+      console.error('Error rendering connection card:', error, connection);
       return (
-        <StandardConnectionCard
-          key={connection.id}
-          connection={connection}
-          onTest={handleTest}
-          onDelete={handleDelete}
-          onEdit={handleEdit}
-        />
+        <div key={connection.id} className="p-4 border border-red-200 rounded-lg bg-red-50">
+          <div className="text-red-800 font-medium">Render Error</div>
+          <div className="text-red-600 text-sm">
+            Failed to render connection: {connection.name}
+          </div>
+          <div className="text-red-500 text-xs mt-1">
+            {error.message}
+          </div>
+        </div>
       );
     }
   };
+
+  // Safety check for connections array
+  const safeConnections = Array.isArray(connections) ? connections : [];
 
   if (loading) {
     return (
@@ -345,7 +500,7 @@ export default function ConnectionsPage() {
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Connection
@@ -353,25 +508,16 @@ export default function ConnectionsPage() {
         </div>
       </div>
 
-      {/* Error Display */}
+      {/* Error State */}
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Error loading connections</h3>
-              <div className="mt-2 text-sm text-red-700">{error}</div>
-            </div>
-          </div>
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+          <div className="text-red-800 font-medium">Error loading connections</div>
+          <div className="text-red-600 text-sm">{error}</div>
         </div>
       )}
 
       {/* Connections Grid */}
-      {!Array.isArray(connections) || connections.length === 0 ? (
+      {safeConnections.length === 0 ? (
         <div className="text-center py-12">
           <Settings className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No connections found</h3>
@@ -388,7 +534,7 @@ export default function ConnectionsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {connections.map(renderConnectionCard)}
+          {safeConnections.map(renderConnectionCard)}
         </div>
       )}
 
@@ -458,101 +604,6 @@ export default function ConnectionsPage() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// Standard connection card for non-PingOne connections
-function StandardConnectionCard({ connection, onTest, onDelete, onEdit }) {
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'connected':
-        return 'bg-green-100 text-green-800';
-      case 'testing':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'error':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getTypeIcon = (type) => {
-    switch (type) {
-      case 'AD':
-        return '🏢';
-      case 'LDAP':
-        return '📁';
-      case 'DATABASE':
-        return '🗄️';
-      case 'PINGONE':
-        return '🔐';
-      default:
-        return '🔗';
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-lg shadow hover:shadow-md transition-shadow p-6">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center">
-          <span className="text-2xl mr-3">{getTypeIcon(connection.type)}</span>
-          <div>
-            <h3 className="text-lg font-medium text-gray-900">{connection.name}</h3>
-            <p className="text-sm text-gray-500">{connection.type}</p>
-          </div>
-        </div>
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(connection.status)}`}>
-          {connection.status}
-        </span>
-      </div>
-
-      <div className="space-y-2 mb-4">
-        <div className="text-sm">
-          <span className="text-gray-500">Server:</span>
-          <span className="text-gray-900 ml-1">{connection.serverName || connection.server_name || 'N/A'}</span>
-        </div>
-        {connection.domain && (
-          <div className="text-sm">
-            <span className="text-gray-500">Domain:</span>
-            <span className="text-gray-900 ml-1">{connection.domain}</span>
-          </div>
-        )}
-        {(connection.lastTested || connection.last_tested) && (
-          <div className="text-sm">
-            <span className="text-gray-500">Last tested:</span>
-            <span className="text-gray-900 ml-1">
-              {new Date(connection.lastTested || connection.last_tested).toLocaleString()}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-        <button
-          onClick={() => onTest(connection.id)}
-          className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
-        >
-          <TestTube className="w-4 h-4 mr-1" />
-          Test
-        </button>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => onEdit(connection)}
-            className="inline-flex items-center px-3 py-1.5 text-blue-600 hover:text-blue-800 text-sm"
-          >
-            <Settings className="w-4 h-4 mr-1" />
-            Edit
-          </button>
-          <button
-            onClick={() => onDelete(connection.id)}
-            className="inline-flex items-center px-3 py-1.5 text-red-600 hover:text-red-800 text-sm"
-          >
-            <Trash2 className="w-4 h-4 mr-1" />
-            Delete
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
