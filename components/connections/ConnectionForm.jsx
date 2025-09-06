@@ -1,7 +1,8 @@
-// components/connections/ConnectionForm.jsx
+// components/connections/ConnectionForm.jsx - FIXED VERSION WITH IMPORT INTEGRATION
 import { useState, useEffect } from 'react';
-import { Eye, EyeOff, TestTube, Save, X, AlertCircle, CheckCircle, Info } from 'lucide-react';
+import { Eye, EyeOff, TestTube, Save, X, AlertCircle, CheckCircle, Info, Upload } from 'lucide-react';
 import { CONNECTION_TYPES, getPingOneUrls } from '../../lib/constants/connectionTypes';
+import ImportPreviewModal from '../import/ImportPreviewModal';
 
 export default function ConnectionForm({ 
   connection = null, 
@@ -16,6 +17,7 @@ export default function ConnectionForm({
   const [errors, setErrors] = useState({});
   const [showPasswords, setShowPasswords] = useState({});
   const [testing, setTesting] = useState(false);
+  const [showImportPreview, setShowImportPreview] = useState(false);
 
   const connectionConfig = CONNECTION_TYPES[connectionType];
 
@@ -104,6 +106,15 @@ export default function ConnectionForm({
               newErrors[field.key] = 'Sync interval must be between 5 and 1440 minutes';
             }
           }
+
+          // Validate user import URL if user import is enabled
+          if (field.key === 'userImportUrl' && formData.enableUserImport && formData[field.key]) {
+            try {
+              new URL(formData[field.key]);
+            } catch {
+              newErrors[field.key] = 'Please enter a valid URL';
+            }
+          }
         }
       });
     }
@@ -147,6 +158,12 @@ export default function ConnectionForm({
       ...prev,
       [fieldKey]: !prev[fieldKey]
     }));
+  };
+
+  const handleImportComplete = (result) => {
+    console.log('Import completed:', result);
+    setShowImportPreview(false);
+    // Optionally show success message or redirect
   };
 
   const renderField = (field) => {
@@ -196,7 +213,9 @@ export default function ConnectionForm({
             </label>
           ) : (
             <input
-              type={field.type === 'password' && !showPassword ? 'password' : field.type}
+              type={field.type === 'password' && !showPassword ? 'password' : 
+                   field.type === 'password' ? 'text' : 
+                   field.type}
               value={value || ''}
               onChange={(e) => handleChange(field.key, e.target.value)}
               placeholder={field.placeholder}
@@ -210,6 +229,7 @@ export default function ConnectionForm({
             />
           )}
           
+          {/* Password toggle only for password fields */}
           {field.type === 'password' && (
             <button
               type="button"
@@ -258,139 +278,156 @@ export default function ConnectionForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Connection Header */}
-      <div className="flex items-center space-x-3 pb-4 border-b">
-        <span className="text-2xl">{connectionConfig.icon}</span>
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">
-            {connection ? 'Edit' : 'Create'} {connectionConfig.label} Connection
-          </h3>
-          <p className="text-sm text-gray-600">
-            {connectionConfig.description}
-          </p>
-        </div>
-      </div>
-
-      {/* Basic Information */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-gray-700">
-            Connection Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            value={formData.name || ''}
-            onChange={(e) => handleChange('name', e.target.value)}
-            placeholder="My Connection"
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              errors.name ? 'border-red-300' : 'border-gray-300'
-            }`}
-            required
-          />
-          {errors.name && (
-            <p className="text-xs text-red-600">{errors.name}</p>
-          )}
-        </div>
-
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-gray-700">
-            Description
-          </label>
-          <input
-            type="text"
-            value={formData.description || ''}
-            onChange={(e) => handleChange('description', e.target.value)}
-            placeholder="Optional description"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-      </div>
-
-      {/* Connection-Specific Fields */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {connectionConfig.fields.map(renderField)}
-      </div>
-
-      {/* PingOne Required Scopes Info */}
-      {connectionType === 'PINGONE' && (
-        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-          <h4 className="text-sm font-medium text-blue-800 mb-2">Required Configuration</h4>
-          <div className="text-sm text-blue-700 space-y-2">
-            <p>Ensure your PingOne application is configured with:</p>
-            <ul className="list-disc list-inside space-y-1 ml-2">
-              <li><strong>Grant Type:</strong> Client Credentials</li>
-              <li><strong>Token Endpoint Auth:</strong> Client Secret Post or Basic</li>
-              <li><strong>Required Scopes:</strong></li>
-              <ul className="list-disc list-inside ml-4 text-xs">
-                {connectionConfig.requiredScopes?.map(scope => (
-                  <li key={scope}>{scope}</li>
-                ))}
-              </ul>
-            </ul>
+    <>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Connection Header */}
+        <div className="flex items-center space-x-3 pb-4 border-b">
+          <span className="text-2xl">{connectionConfig.icon}</span>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {connection ? 'Edit' : 'Create'} {connectionConfig.label} Connection
+            </h3>
+            <p className="text-sm text-gray-600">
+              {connectionConfig.description}
+            </p>
           </div>
         </div>
-      )}
 
-      {/* Test Result */}
-      {testResult && (
-        <div className={`p-4 rounded-md ${
-          testResult.success 
-            ? 'bg-green-50 border border-green-200' 
-            : 'bg-red-50 border border-red-200'
-        }`}>
-          <div className="flex items-center">
-            {testResult.success ? (
-              <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-            ) : (
-              <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
+        {/* Basic Information */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-gray-700">
+              Connection Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.name || ''}
+              onChange={(e) => handleChange('name', e.target.value)}
+              placeholder="My Connection"
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.name ? 'border-red-300' : 'border-gray-300'
+              }`}
+              required
+            />
+            {errors.name && (
+              <p className="text-xs text-red-600 flex items-center space-x-1">
+                <AlertCircle className="w-3 h-3" />
+                <span>{errors.name}</span>
+              </p>
             )}
-            <span className={`text-sm font-medium ${
-              testResult.success ? 'text-green-800' : 'text-red-800'
-            }`}>
-              {testResult.message}
-            </span>
           </div>
-          {testResult.details && (
-            <pre className="mt-2 text-xs text-gray-600 bg-white p-2 rounded overflow-x-auto">
-              {JSON.stringify(testResult.details, null, 2)}
-            </pre>
-          )}
+
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-gray-700">
+              Description
+            </label>
+            <input
+              type="text"
+              value={formData.description || ''}
+              onChange={(e) => handleChange('description', e.target.value)}
+              placeholder="Optional description"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
-      )}
 
-      {/* Form Actions */}
-      <div className="flex items-center justify-between pt-6 border-t">
-        <button
-          type="button"
-          onClick={handleTest}
-          disabled={testing}
-          className="flex items-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-300 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <TestTube className={`w-4 h-4 mr-2 ${testing ? 'animate-pulse' : ''}`} />
-          {testing ? 'Testing...' : 'Test Connection'}
-        </button>
+        {/* Configuration Fields */}
+        {connectionConfig.fields && (
+          <div className="space-y-4">
+            <h4 className="text-md font-medium text-gray-900">Connection Configuration</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {connectionConfig.fields.map(renderField)}
+            </div>
+          </div>
+        )}
 
-        <div className="flex space-x-3">
+        {/* Test Result Display */}
+        {testResult && (
+          <div className={`p-4 rounded-md border ${
+            testResult.success 
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : testResult.testing
+              ? 'bg-blue-50 border-blue-200 text-blue-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+            <div className="flex items-center space-x-2">
+              {testResult.success ? (
+                <CheckCircle className="w-4 h-4" />
+              ) : testResult.testing ? (
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <AlertCircle className="w-4 h-4" />
+              )}
+              <span className="font-medium">
+                {testResult.testing ? 'Testing...' : testResult.message}
+              </span>
+            </div>
+            
+            {testResult.details && (
+              <div className="mt-2 text-sm">
+                <pre className="whitespace-pre-wrap">
+                  {JSON.stringify(testResult.details, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex items-center justify-between pt-4 border-t">
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <X className="w-4 h-4 mr-2" />
+            <X className="w-4 h-4 inline mr-2" />
             Cancel
           </button>
-          
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {loading ? 'Saving...' : connection ? 'Update Connection' : 'Create Connection'}
-          </button>
+
+          <div className="flex items-center space-x-3">
+            {/* Import Now Button - Only show for existing PingOne connections with import enabled */}
+            {connection && connectionType === 'PINGONE' && formData.enableUserImport && formData.userImportUrl && (
+              <button
+                type="button"
+                onClick={() => setShowImportPreview(true)}
+                className="px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-md hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <Upload className="w-4 h-4 inline mr-2" />
+                Import Now
+              </button>
+            )}
+
+            {onTest && (
+              <button
+                type="button"
+                onClick={handleTest}
+                disabled={testing || loading}
+                className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                <TestTube className="w-4 h-4 inline mr-2" />
+                {testing ? 'Testing...' : 'Test Connection'}
+              </button>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              <Save className="w-4 h-4 inline mr-2" />
+              {loading ? 'Saving...' : connection ? 'Update Connection' : 'Create Connection'}
+            </button>
+          </div>
         </div>
-      </div>
-    </form>
+      </form>
+
+      {/* Import Preview Modal */}
+      <ImportPreviewModal
+        connectionId={connection?.id}
+        isOpen={showImportPreview}
+        onClose={() => setShowImportPreview(false)}
+        onImport={handleImportComplete}
+      />
+    </>
   );
 }
